@@ -4,23 +4,33 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - pushed-images:/etc/data
+      - pushed-images:/var/lib/registry
     networks:
       - pokemon-net
 
   db:
     image: postgres:alpine
+    restart: always
     ports:
       - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: pokemon-db
     volumes:
-      - db-data:/etc/data
+      - db-data:/var/lib/postgresql/data
     networks:
       - pokemon-net
 
   pgadmin:
     image: dpage/pgadmin4
     ports:
-     - "5050:5050"
+     - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: user@domain.com
+      PGADMIN_DEFAULT_PASSWORD: adminpassword
+    networks:
+      - pokemon-net
 
 volumes:
   db-data:
