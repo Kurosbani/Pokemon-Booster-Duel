@@ -4,7 +4,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - pushed-images/etc/data
+      - pushed-images:/etc/data
     networks:
       - pokemon-net
 
@@ -22,14 +22,9 @@ services:
     ports:
      - "5050:5050"
 
-
 volumes:
   db-data:
   pushed-images:
-
-configs:
-
-secrets:
 
 networks:
   pokemon-net:
