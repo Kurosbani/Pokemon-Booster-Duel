@@ -1,0 +1,41 @@
+services:
+  registry:
+    image: registry:2
+    ports:
+      - "5000:5000"
+    volumes:
+      - pushed-images/etc/data
+    networks:
+      - pokemon-net
+
+  db:
+    image: postgres:alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/etc/data
+    networks:
+      - pokemon-net
+
+  pgadmin:
+    image: dpage/pgadmin4
+    ports:
+     - "5050:5050"
+
+
+volumes:
+  db-data:
+  pushed-images:
+
+configs:
+
+secrets:
+
+networks:
+  pokemon-net:
+    driver: bridge
+
+
+#1. `registry`: Image `registry:2` auf Port 5000 mit einem persistenten Docker Volume für gepushte Images.
+#2. `db`: Image `postgres:alpine` auf Port 5432 mit einem persistenten Volume für die Pokemon-Daten.
+#3. `pgadmin`: Image `dpage/pgadmin4` auf Port 5050 zur Datenbankverwaltung.
