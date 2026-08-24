@@ -42,7 +42,7 @@ Services im Infra-Stack:
 Zu dieser docker-compose, müssen unbedingte eine .gitignore und .env Datei angelegt werden, damit sensible Daten aus der env nicht ins repo gepusht werden.
 
 Befehl zum Starten:
-$ docker-compose -f docker-compose.infra.yml up -d
+$ docker compose -f docker-compose.infra.yml up -d
 
 --------------------------------------------------------------------------------
 
