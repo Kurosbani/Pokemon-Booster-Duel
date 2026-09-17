@@ -29,21 +29,18 @@ const chunkArray = (arr, size) => {
 async function syncPokemonData() { 
     let client;
 
-    // 1. Add this helper at the top of your file (or inside syncPokemonData)
     const fetchWithRetry = async (url, retries = 3) => {
         for (let i = 0; i < retries; i++) {
             try {
                 const controller = new AbortController();
-                // Node 18+ native timeout (falls back gracefully on older versions)
                 if ('timeout' in controller.signal) controller.signal.timeout = 10_000;
                 
                 const res = await fetch(url, { signal: controller.signal });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 return await res.json();
             } catch (err) {
-                if (i === retries - 1) throw err; // Give up after max retries
+                if (i === retries - 1) throw err;
                 
-                // Exponential backoff + jitter to avoid thundering herd
                 const wait = Math.min(2000 * Math.pow(2, i), 5000) + Math.random() * 500;
                 console.log(`⏳ Retrying ${url} in ${(wait/1000).toFixed(1)}s... (${i+1}/${retries})`);
                 await new Promise(r => setTimeout(r, wait));
@@ -54,47 +51,76 @@ async function syncPokemonData() {
   try {
     client = await pool.connect();
     
-    console.log("Fetching full Pokemon list...");
-    const pokeRes = await fetch(fetchEndpoints.pokemon);
-    const pokeData = await pokeRes.json();
-    const allResults = pokeData.results; // Contains all ~1,000+ entries
+    // console.log("Fetching full Pokemon list...");
+    // const pokeRes = await fetch(fetchEndpoints.pokemon);
+    // const pokeData = await pokeRes.json();
+    // const allResults = pokeData.results;
 
-    const pSpeciesRes = await fetch(fetchEndpoints.pokemonspecies);
-    const pSpeciesData = await pSpeciesRes.json();
-    const allSpeciesResults = pSpeciesData.results;
+    // const pSpeciesRes = await fetch(fetchEndpoints.pokemonspecies);
+    // const pSpeciesData = await pSpeciesRes.json();
+    // const allSpeciesResults = pSpeciesData.results;
 
-    const abilityRes = await fetch(fetchEndpoints.ability);
-    const abilityData = await abilityRes.json();
-    const allAbilityResults = abilityData.results;
+    // const abilityRes = await fetch(fetchEndpoints.ability);
+    // const abilityData = await abilityRes.json();
+    // const allAbilityResults = abilityData.results;
 
-    console.log(`Found ${allResults.length} total Pokémon. Processing in batches...`);
+    // const moveRes = await fetch(fetchEndpoints.move);
+    // const moveData = await moveRes.json();
+    // const allMoveResults = moveData.results;
 
-    // Process 20 Pokémon detail requests at a time
+    // const typeRes = await fetch(fetchEndpoints.type);
+    // const typeData = await typeRes.json();
+    // const allTypeResults = typeData.results;
+
+    // const genderRes = await fetch(fetchEndpoints.gender);
+    // const genderData = await genderRes.json();
+    // const allGenderResults = genderData.results;
+
+    const currencyRes = await fetch(fetchEndpoints.currency);
+    const currencyData = await currencyRes.json();
+    const allCurrencyResults = currencyData.results;
+
+    console.log(`Found ${allCurrencyResults.length} total currencies. Processing in batches...`);
+
     const BATCH_SIZE = 20;
-    const batches = chunkArray(allResults, BATCH_SIZE);
+    const batches = chunkArray(allCurrencyResults, BATCH_SIZE);
 
     for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
         console.log(`Importing batch ${i + 1} of ${batches.length}...`);
 
-        // Fetch detail JSONs for the current batch concurrently
         const pokemonDetails = await Promise.all(
             batch.map(p => fetch(p.url).then(res => res.json()))
         );
 
-        // 2. Replace your original Promise.all line with this concurrency-limited version:
-        const CONCURRENCY = 5; // Max simultaneous requests to PokeAPI
-        const speciesDetails = [];
+        // const CONCURRENCY = 5;
+        // const speciesDetails = [];
 
-        for (let i = 0; i < allSpeciesResults.length; i += CONCURRENCY) {
-            const batch = await Promise.all(
-                allSpeciesResults.slice(i, i + CONCURRENCY).map(s => fetchWithRetry(s.url))
-            );
-            speciesDetails.push(...batch);
-        }
+        // for (let i = 0; i < allSpeciesResults.length; i += CONCURRENCY) {
+        //     const batch = await Promise.all(
+        //         allSpeciesResults.slice(i, i + CONCURRENCY).map(s => fetchWithRetry(s.url))
+        //     );
+        //     speciesDetails.push(...batch);
+        // }
 
-        const abilityDetails = await Promise.all(
-            allAbilityResults.map(a => fetch(a.url).then(res => res.json()))
+        // const abilityDetails = await Promise.all(
+        //     allAbilityResults.map(a => fetch(a.url).then(res => res.json()))
+        // );
+
+        // const moveDetails = await Promise.all(
+        //     allMoveResults.map(m => fetch(m.url).then(res => res.json()))
+        // );
+
+        // const typeDetails = await Promise.all(
+        //     allTypeResults.map(t => fetch(t.url).then(res => res.json()))
+        // );
+
+        // const genderDetails = await Promise.all(
+        //     allGenderResults.map(g => fetch(g.url).then(res => res.json()))
+        // );
+
+        const currencyDetails = await Promise.all(
+            allCurrencyResults.map(g => fetch(g.url).then(res => res.json()))
         );
 
         // transaction
@@ -102,64 +128,124 @@ async function syncPokemonData() {
 
         for (const pData of pokemonDetails) {
             // 1. Insert Pokemon
-            await client.query(sqlQueries.pokemon, [
-                pData.id, 
-                pData.name, 
-                pData.order,
-                pData.height, 
-                pData.weight, 
-                pData.base_experience,
-                pData.is_default,
-                extractIdFromUrl(pData.species.url)
-            ]);
+            // await client.query(sqlQueries.pokemon, [
+            //     pData.id, 
+            //     pData.name, 
+            //     pData.order,
+            //     pData.height, 
+            //     pData.weight, 
+            //     pData.base_experience,
+            //     pData.is_default,
+            //     extractIdFromUrl(pData.species.url)
+            // ]);
 
-            // 2. Insert Abilities
-            for (const ab of abilityDetails) {
-                const generationId = extractIdFromUrl(ab.generation.url);                await client.query(sqlQueries.ability, [
-                    ab.id, 
-                    ab.name, 
-                    ab.is_main_series,
-                    generationId,
-                ]);
-            }            
+            // // 2. Insert Abilities
+            // for (const ab of abilityDetails) {
+            //     const generationId = extractIdFromUrl(ab.generation.url);                
+            //     await client.query(sqlQueries.ability, [
+            //         ab.id, 
+            //         ab.name, 
+            //         ab.is_main_series,
+            //         generationId,
+            //     ]);
+            // }            
                 
-            // 23. Insert PokemonAbilities
-            for (const pab of pData.abilities) {
-                const abilityId = extractIdFromUrl(pab.ability.url);
-                await client.query(sqlQueries.pokemonability, [
-                    pab.is_hidden, 
-                    pab.slot, 
-                    abilityId,
-                    pData.id
+            // // 23. Insert PokemonAbilities
+            // for (const pab of pData.abilities) {
+            //     const abilityId = extractIdFromUrl(pab.ability.url);
+            //     await client.query(sqlQueries.pokemonability, [
+            //         pab.is_hidden, 
+            //         pab.slot, 
+            //         abilityId,
+            //         pData.id
+            //     ]);
+            // }
+
+            // 67. Insert Species
+            // for (const spData of speciesDetails) {
+            //     await client.query(sqlQueries.pokemonspecies, [
+            //         spData.id,
+            //         spData.name, 
+            //         spData.order, 
+            //         spData.gender_rate,
+            //         spData.capture_rate,
+            //         spData.base_happiness,
+            //         spData.is_baby,
+            //         spData.hatch_counter,
+            //         spData.has_gender_differences,
+            //         spData.forms_switchable,
+            //         spData.evolution_chain_id,
+            //         spData.evolves_from_species_id,
+            //         spData.generation_id,
+            //         spData.growth_rate_id,
+            //         spData.pokemon_color_id,
+            //         spData.pokemon_habitat_id,
+            //         spData.pokemon_shape_id,
+            //         spData.is_legendary,
+            //         spData.is_mythical
+            //     ]);
+            // }
+
+            // for (const mv of moveDetails) {
+            //     await client.query(sqlQueries.move,[
+            //         mv.id,
+            //         mv.name,
+            //         mv.power,
+            //         mv.pp,
+            //         mv.accuracy,
+            //         mv.priority,
+            //         mv.effect_chance,
+            //         mv.generation ? extractIdFromUrl(mv.generation.url) : null,
+            //         mv.damage_class ? extractIdFromUrl(mv.damage_class.url) : null,
+            //         mv.target ? extractIdFromUrl(mv.target.url) : null,
+            //         mv.type ? extractIdFromUrl(mv.type.url) : null,
+            //         mv.contest_effect ? extractIdFromUrl(mv.contest_effect.url) : null,
+            //         mv.contest_type ? extractIdFromUrl(mv.contest_type.url) : null,
+            //         mv.super_contest_effect ? extractIdFromUrl(mv.super_contest_effect.url) : null
+            //     ]);
+            // }
+
+            // for (const mvd of moveDetails) {
+            //     await client.query(sqlQueries.movedamageclass,[
+            //         mvd.id,
+            //         mvd.name
+            //     ]);
+            // }
+
+            // for (const tp of typeDetails) {
+            //     await client.query(sqlQueries.type,[
+            //         tp.id,
+            //         tp.name,
+            //         tp.move_damage_class  ? extractIdFromUrl(tp.move_damage_class.url) : null
+            //     ]);
+            // }
+
+            // for (const gd of genderDetails) {
+            //     await client.query(sqlQueries.gender,[
+            //         gd.id,
+            //         gd.name
+            //     ]);
+            // }
+
+            for (const cc of currencyDetails) {
+                await client.query(sqlQueries.currency,[
+                    cc.id,
+                    cc.name
                 ]);
             }
 
-            // 67. Insert Species
-            for (const spData of speciesDetails) {
-                await client.query(sqlQueries.pokemonspecies, [
-                    spData.id,
-                    spData.name, 
-                    spData.order, 
-                    spData.gender_rate,
-                    spData.capture_rate,
-                    spData.base_happiness,
-                    spData.is_baby,
-                    spData.hatch_counter,
-                    spData.has_gender_differences,
-                    spData.forms_switchable,
-                    spData.evolution_chain_id,
-                    spData.evolves_from_species_id,
-                    spData.generation_id,
-                    spData.growth_rate_id,
-                    spData.pokemon_color_id,
-                    spData.pokemon_habitat_id,
-                    spData.pokemon_shape_id,
-                    spData.is_legendary,
-                    spData.is_mythical
-                ]);
+            for (const item of itemDetails) {
+                await client.query(sqlQueries.item,[
+                    item.id,
+                    item.name,
+                    item.fling_power,
+                    item.catagory ? extractIdFromUrl(item.category.url) : null,
+                    item.fling_effect
+                ])
             }
 
             // Insert all the others... :wsd: :unamused:
+            // all moves next...
         }
 
         await client.query('COMMIT');
