@@ -48,7 +48,7 @@ async function syncPokemonData() {
         }
     };
 
-  try {
+    try {
     client = await pool.connect();
     
     // console.log("Fetching full Pokemon list...");
@@ -68,6 +68,10 @@ async function syncPokemonData() {
     // const moveData = await moveRes.json();
     // const allMoveResults = moveData.results;
 
+    const moveDCRes = await fetch(fetchEndpoints.movedamageclass);
+    const moveDCData = await moveDCRes.json();
+    const allMoveDCResults = moveDCData.results;
+
     // const typeRes = await fetch(fetchEndpoints.type);
     // const typeData = await typeRes.json();
     // const allTypeResults = typeData.results;
@@ -76,14 +80,26 @@ async function syncPokemonData() {
     // const genderData = await genderRes.json();
     // const allGenderResults = genderData.results;
 
-    const currencyRes = await fetch(fetchEndpoints.currency);
-    const currencyData = await currencyRes.json();
-    const allCurrencyResults = currencyData.results;
+    // const currencyRes = await fetch(fetchEndpoints.currency);
+    // const currencyData = await currencyRes.json();
+    // const allCurrencyResults = currencyData.results;
 
-    console.log(`Found ${allCurrencyResults.length} total currencies. Processing in batches...`);
+    // const itemCategoryRes = await fetch(fetchEndpoints.itemcategory);
+    // const itemCategoryData = await itemCategoryRes.json();
+    // const allItemCategoryResults = itemCategoryData.results;
+
+    const itemAttributeRes = await fetch(fetchEndpoints.itemattribute);
+    const itemAttributeData = await itemAttributeRes.json();
+    const allItemAttributeResults = itemAttributeData.results;
+
+    // const itemRes = await fetch(fetchEndpoints.item);
+    // const itemData = await itemRes.json();
+    // const allItemResults = itemData.results;
+
+    console.log(`Found ${allMoveDCResults.length} total items. Processing in batches...`);
 
     const BATCH_SIZE = 20;
-    const batches = chunkArray(allCurrencyResults, BATCH_SIZE);
+    const batches = chunkArray(allMoveDCResults, BATCH_SIZE);
 
     for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
@@ -93,14 +109,14 @@ async function syncPokemonData() {
             batch.map(p => fetch(p.url).then(res => res.json()))
         );
 
-        // const CONCURRENCY = 5;
-        // const speciesDetails = [];
+        const CONCURRENCY = 5;
+        const itemDetails = [];
 
-        // for (let i = 0; i < allSpeciesResults.length; i += CONCURRENCY) {
+        // for (let i = 0; i < allItemCategoryResults.length; i += CONCURRENCY) {
         //     const batch = await Promise.all(
-        //         allSpeciesResults.slice(i, i + CONCURRENCY).map(s => fetchWithRetry(s.url))
+        //         allItemCategoryResults.slice(i, i + CONCURRENCY).map(s => fetchWithRetry(s.url))
         //     );
-        //     speciesDetails.push(...batch);
+        //     itemDetails.push(...batch);
         // }
 
         // const abilityDetails = await Promise.all(
@@ -111,6 +127,10 @@ async function syncPokemonData() {
         //     allMoveResults.map(m => fetch(m.url).then(res => res.json()))
         // );
 
+        // const moveDCDetails = await Promise.all(
+        //     allMoveDCResults.map(m => fetch(m.url).then(res => res.json()))
+        // );
+
         // const typeDetails = await Promise.all(
         //     allTypeResults.map(t => fetch(t.url).then(res => res.json()))
         // );
@@ -119,8 +139,16 @@ async function syncPokemonData() {
         //     allGenderResults.map(g => fetch(g.url).then(res => res.json()))
         // );
 
-        const currencyDetails = await Promise.all(
-            allCurrencyResults.map(g => fetch(g.url).then(res => res.json()))
+        // const currencyDetails = await Promise.all(
+        //     allCurrencyResults.map(g => fetch(g.url).then(res => res.json()))
+        // );
+
+        // const itemCategoryDetails = await Promise.all(
+        //     allItemCategoryResults.map(g => fetch(g.url).then(res => res.json()))
+        // );
+
+        const itemAttributeDetails = await Promise.all(
+            allItemCategoryResults.map(g => fetch(g.url).then(res => res.json()))
         );
 
         // transaction
@@ -205,12 +233,12 @@ async function syncPokemonData() {
             //     ]);
             // }
 
-            // for (const mvd of moveDetails) {
-            //     await client.query(sqlQueries.movedamageclass,[
-            //         mvd.id,
-            //         mvd.name
-            //     ]);
-            // }
+            for (const mvdc of moveDCDetails) {
+                await client.query(sqlQueries.movedamageclass,[
+                    mvdc.id,
+                    mvdc.name
+                ]);
+            }
 
             // for (const tp of typeDetails) {
             //     await client.query(sqlQueries.type,[
@@ -227,30 +255,43 @@ async function syncPokemonData() {
             //     ]);
             // }
 
-            for (const cc of currencyDetails) {
-                await client.query(sqlQueries.currency,[
-                    cc.id,
-                    cc.name
-                ]);
-            }
+            // for (const cc of currencyDetails) {
+            //     await client.query(sqlQueries.currency,[
+            //         cc.id,
+            //         cc.name
+            //     ]);
+            // }
 
-            for (const item of itemDetails) {
-                await client.query(sqlQueries.item,[
-                    item.id,
-                    item.name,
-                    item.fling_power,
-                    item.catagory ? extractIdFromUrl(item.category.url) : null,
-                    item.fling_effect
+            // for (const itemC of itemCategoryDetails) {
+            //     await client.query(sqlQueries.itemcategory,[
+            //         itemC.id,
+            //         itemC.name,
+            //         itemC.pocket ? extractIdFromUrl(itemC.pocket.url) : null
+            //     ])
+            // }
+
+            for (const itemC of itemAttributeDetails) {
+                await client.query(sqlQueries.itemattribute,[
+                    itemC.id,
+                    itemC.name
                 ])
             }
 
+            // for (const item of itemDetails) {
+            //     await client.query(sqlQueries.item,[
+            //         item.id,
+            //         item.name,
+            //         item.fling_power,
+            //         item.category ? extractIdFromUrl(item.category.url) : null,
+            //         item.fling_effect ? extractIdFromUrl(item.fling_effect.url) : null
+            //     ])
+            // }
+
             // Insert all the others... :wsd: :unamused:
-            // all moves next...
         }
-
-        await client.query('COMMIT');
     }
-
+        await client.query('COMMIT');
+    
     console.log("Full sync complete!");
 
   } catch (error) {
