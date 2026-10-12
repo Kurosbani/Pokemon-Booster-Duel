@@ -29,14 +29,13 @@ app.get('/pokemon', async (req, res) => {
   }
 });
 
-
 app.get('/pokemon/:value', async (req, res) => {
   const query = req.params.value;
 
   // 🔍 Parse & sanitize query parameters
-  const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100); // Default 50, max 100
-  const offset = Math.max(parseInt(req.query.offset) || 0, 0);           // Default 0
-  let sortField = req.query.sort || 'id';                              // Default sort by ID
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
+  const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+  let sortField = req.query.sort || 'id';
 
   // 🔍 Whitelist allowed sort columns to prevent SQL injection
   const allowedSortFields = ['id', 'name', 'value'];
@@ -47,17 +46,19 @@ app.get('/pokemon/:value', async (req, res) => {
   try {
     let result;
 
-    // 🐍 If purely numeric → exact ID lookup
+    // 🔄 Base query with LEFT JOIN to pokemonspecies table
+    const baseQuery = `SELECT p.*, ps.* FROM pokemon p LEFT JOIN pokemonspecies ps ON p.pokemon_species_id = ps.id WHERE p.is_default = true`;
+
     if (/^\d+$/.test(query)) {
+      // Exact ID lookup
       result = await pool.query(
-        `SELECT * FROM pokemon WHERE id = $1 ORDER BY ${sortField} ASC LIMIT $2 OFFSET $3`,
+        `${baseQuery} AND p.id = $1 ORDER BY p.${sortField} ASC LIMIT $2 OFFSET $3`,
         [parseInt(query), limit, offset]
       );
-    } 
-    // 🔍 Otherwise → case-insensitive name search (partial match)
-    else {
+    } else {
+      // Name search (partial match)
       result = await pool.query(
-        `SELECT * FROM pokemon WHERE name ILIKE $1 ORDER BY ${sortField} ASC LIMIT $2 OFFSET $3`,
+        `${baseQuery} AND p.name ILIKE $1 ORDER BY p.${sortField} ASC LIMIT $2 OFFSET $3`,
         [`%${query}%`, limit, offset]
       );
     }
@@ -67,44 +68,6 @@ app.get('/pokemon/:value', async (req, res) => {
   } catch (err) {
     console.error('❌ Search error:', err.message);
     res.status(500).json({ error: 'Search failed' });
-  }
-});
-
-app.post('/pokemon', async (req, res) => {
-  const { name, value } = req.body;
-  if (!name || typeof value === 'undefined') {
-    return res.status(400).json({ error: 'Missing "name" or "value"' });
-  }
-
-  try {
-    // $1 syntax is native to node-postgres for parameterized queries
-    const result = await pool.query(
-      'INSERT INTO pokemon (name, value) VALUES ($1, $2) RETURNING *',
-      [String(name), parseFloat(value)]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to create pokemon' });
-  }
-});
-
-app.delete('/pokemon/:id', async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' });
-
-  try {
-    const result = await pool.query(
-      'DELETE FROM pokemon WHERE id = $1 RETURNING *',
-      [id]
-    );
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
-    res.json(result.rows[0] || { status: 'deleted' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to delete item' });
   }
 });
 

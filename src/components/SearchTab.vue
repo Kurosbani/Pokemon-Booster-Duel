@@ -88,7 +88,7 @@ function getTypeColor(type: string): string {
     'pink': '#bdafb3',
     'cyan': '#a5eacc',
     'white': '#ddd9c8',
-    'gray': '#7a7c90'
+    'gray': '#7a7c90' 
   }
   return colors[type.toLowerCase()] || '#7a7c90'
 }
