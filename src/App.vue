@@ -35,16 +35,19 @@ const activeTab = ref<'search' | 'game'>('search')
 
 <style scoped>
 .app-container {
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
+  min-height: 100vh;
+  overflow-x: hidden;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .app-header {
   background: linear-gradient(135deg, #e366ea 0%, #a24b8b 100%);
   padding: 20px 24px;
   text-align: center;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 4px 20px rgba(255, 255, 255, 0.3);
 }
 
 .app-header h1 {
@@ -60,10 +63,31 @@ const activeTab = ref<'search' | 'game'>('search')
   gap: 8px;
 }
 
+.tab-btn {
+  margin-top: 16px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #000;
+  background: #FFFFFF;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.tab-btn:hover {
+  background: #f0f0f5;
+  color: #080808;
+}
+.tab-btn:focus-visible {
+  outline: inset 2px solid #09071855;
+  outline-offset: 2px;
+}
+
 .app-main {
   flex: 1;
-  padding: 24px;
-  max-width: 1400px;
+  padding: 14px;
+  max-width: 2400px;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
