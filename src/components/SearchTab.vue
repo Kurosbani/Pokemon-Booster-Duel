@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import PokemonCard from './PokemonCard.vue'
+import { cardVars, formatName } from './cardStyle'
 
 // ---------- Types ----------
 interface SearchItem {
@@ -41,7 +43,6 @@ const searchError = ref('')
 const selectedPokemon = ref<PokemonDetail | null>(null)
 const isLoadingDetail = ref(false)
 const detailError = ref('')
-const imageFailed = ref(false)
 
 const searchBarEl = ref<HTMLElement | null>(null)
 
@@ -103,7 +104,6 @@ async function selectPokemon(item: SearchItem): Promise<void> {
   query.value = formatName(item.name)
   selectedPokemon.value = null
   detailError.value = ''
-  imageFailed.value = false
   isLoadingDetail.value = true
 
   try {
@@ -139,69 +139,26 @@ onUnmounted(() => {
   detailController?.abort()
 })
 
-// ---------- Display helpers ----------
-const TYPE_COLORS: Record<string, string> = {
-  normal: '#a8a77a', fire: '#ee8130', water: '#6390f0', electric: '#f7d02c',
-  grass: '#7ac74c', ice: '#96d9d6', fighting: '#c22e28', poison: '#a33ea1',
-  ground: '#e2bf65', flying: '#a98ff3', psychic: '#f95587', bug: '#a6b91a',
-  rock: '#b6a136', ghost: '#735797', dragon: '#6f35fc', dark: '#705746',
-  steel: '#b7b7ce', fairy: '#d685ad',
-}
-const FALLBACK_COLOR = '#7a7c90'
+// ---------- Card data ----------
+const cardTypes = computed(() =>
+  [...(selectedPokemon.value?.types ?? [])].sort((a, b) => a.slot - b.slot).map((t) => t.name),
+)
 
-function getTypeColor(type: string): string {
-  return TYPE_COLORS[type.toLowerCase()] ?? FALLBACK_COLOR
-}
+const hpStat = computed(
+  () => selectedPokemon.value?.stats.find((s) => s.name === 'hp')?.base_stat ?? null,
+)
 
-// Pick black or white text depending on how light the background is
-function readableOn(hex: string): string {
-  const n = parseInt(hex.slice(1), 16)
-  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
-  return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? '#1b2230' : '#ffffff'
-}
-
-function formatName(name: string): string {
-  return name
-    .split('-')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
-}
-
-const STAT_LABELS: Record<string, string> = {
-  hp: 'HP',
-  attack: 'Attack',
-  defense: 'Defense',
-  'special-attack': 'Sp. Atk',
-  'special-defense': 'Sp. Def',
-  speed: 'Speed',
-}
-function statLabel(name: string): string {
-  return STAT_LABELS[name] ?? formatName(name)
-}
-
-const STAT_MAX = 180 // bar is full at this value (most stats stay below it)
-function statWidth(value: number): string {
-  return `${Math.min(100, (value / STAT_MAX) * 100)}%`
-}
-
-const accent = computed(() => {
-  const first = selectedPokemon.value?.types[0]?.name
-  return first ? getTypeColor(first) : FALLBACK_COLOR
+const rarityTags = computed(() => {
+  const p = selectedPokemon.value
+  if (!p) return []
+  return [p.is_legendary && 'Legendary', p.is_mythical && 'Mythical', p.is_baby && 'Baby'].filter(
+    (t): t is string => !!t,
+  )
 })
 
-const totalStats = computed(() =>
-  (selectedPokemon.value?.stats ?? []).reduce((sum, s) => sum + s.base_stat, 0),
-)
-
-const dexNumber = computed(() =>
-  selectedPokemon.value ? `#${String(selectedPokemon.value.id).padStart(4, '0')}` : '',
-)
-
-const heightLabel = computed(() =>
-  selectedPokemon.value?.height != null ? `${(selectedPokemon.value.height / 10).toFixed(1)} m` : '—',
-)
-const weightLabel = computed(() =>
-  selectedPokemon.value?.weight != null ? `${(selectedPokemon.value.weight / 10).toFixed(1)} kg` : '—',
+// Colours for the spotlight behind the card
+const stageVars = computed(() =>
+  selectedPokemon.value ? cardVars(cardTypes.value) : { '--c1': '#ff3d8b', '--c2': '#4b5bff' },
 )
 
 function playCry(): void {
@@ -218,6 +175,10 @@ function playCry(): void {
 
     <!-- Search -->
     <div ref="searchBarEl" class="search-bar">
+      <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4" />
+        <path d="M15.5 15.5 21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+      </svg>
       <input
         v-model="query"
         type="text"
@@ -259,147 +220,144 @@ function playCry(): void {
       </div>
     </div>
 
-    <!-- Detail states -->
-    <p v-if="isLoadingDetail" class="status">Loading Pokémon…</p>
-    <p v-else-if="detailError" class="status status--error">{{ detailError }}</p>
-
-    <!-- Detail card -->
-    <article
-      v-if="selectedPokemon"
-      class="pokemon-card"
-      :style="{ '--accent': accent }"
-    >
-      <div class="art">
-        <img
-          v-if="selectedPokemon.image && !imageFailed"
-          :src="selectedPokemon.image"
-          :alt="formatName(selectedPokemon.name)"
-          @error="imageFailed = true"
+    <!-- Stage: spotlight in the card's type colours, card (or empty slot) on top -->
+    <section :class="['stage', { 'stage--idle': !selectedPokemon }]" :style="stageVars">
+      <div v-if="selectedPokemon" class="card-wrap">
+        <PokemonCard
+          :key="selectedPokemon.id"
+          :name="selectedPokemon.name"
+          :types="cardTypes"
+          :image="selectedPokemon.image"
+          :hp="hpStat"
+          :dex="selectedPokemon.id"
+          :height="selectedPokemon.height"
+          :weight="selectedPokemon.weight"
+          :base-exp="selectedPokemon.base_experience"
+          :abilities="selectedPokemon.abilities"
+          :stats="selectedPokemon.stats"
+          :tags="rarityTags"
         />
-        <div v-else class="art-empty">No image available</div>
       </div>
 
-      <div class="card-info">
-        <div class="title-row">
-          <h3>{{ formatName(selectedPokemon.name) }}</h3>
-          <span class="dex">{{ dexNumber }}</span>
-        </div>
-
-        <div class="types">
-          <span
-            v-for="t in selectedPokemon.types"
-            :key="t.slot"
-            class="type-badge"
-            :style="{
-              backgroundColor: getTypeColor(t.name),
-              color: readableOn(getTypeColor(t.name)),
-            }"
-          >
-            {{ formatName(t.name) }}
-          </span>
-          <span v-if="selectedPokemon.is_legendary" class="tag">Legendary</span>
-          <span v-if="selectedPokemon.is_mythical" class="tag">Mythical</span>
-          <span v-if="selectedPokemon.is_baby" class="tag">Baby</span>
-        </div>
-
-        <dl class="facts">
-          <div><dt>Height</dt><dd>{{ heightLabel }}</dd></div>
-          <div><dt>Weight</dt><dd>{{ weightLabel }}</dd></div>
-          <div><dt>Base EXP</dt><dd>{{ selectedPokemon.base_experience ?? '-' }}</dd>
-          </div>
-        </dl>
-
-        <div v-if="selectedPokemon.abilities.length" class="abilities">
-          <h4>Abilities</h4>
-          <ul>
-            <li v-for="a in selectedPokemon.abilities" :key="a.slot + a.name">
-              {{ formatName(a.name) }}
-              <small v-if="a.is_hidden">hidden</small>
-            </li>
-          </ul>
-        </div>
-
-        <div v-if="selectedPokemon.stats.length" class="stats">
-          <h4>Base stats</h4>
-          <div v-for="s in selectedPokemon.stats" :key="s.name" class="stat-row">
-            <span class="stat-name">{{ statLabel(s.name) }}</span>
-            <span class="stat-value">{{ s.base_stat }}</span>
-            <span class="bar"><span class="fill" :style="{ width: statWidth(s.base_stat) }"></span></span>
-          </div>
-          <div class="stat-row stat-row--total">
-            <span class="stat-name">Total</span>
-            <span class="stat-value">{{ totalStats }}</span>
-          </div>
-        </div>
-
-        <button v-if="selectedPokemon.cry" type="button" class="cry-btn" @click="playCry">
-          Play cry
-        </button>
+      <div v-else :class="['slot', { 'slot--error': detailError }]">
+        <span v-if="isLoadingDetail" class="slot-spin" aria-hidden="true"></span>
+        <p v-if="isLoadingDetail" class="status">Loading Pokémon…</p>
+        <p v-else-if="detailError" class="status status--error">{{ detailError }}</p>
+        <p v-else class="status">Pick a Pokémon from the results to see its stats.</p>
       </div>
-    </article>
 
-    <p
-      v-else-if="!isLoadingDetail && !detailError"
-      class="status status--hint"
-    >
-      Pick a Pokémon from the results to see its stats.
-    </p>
+      <button
+        v-if="selectedPokemon?.cry"
+        type="button"
+        class="cry-btn"
+        @click="playCry"
+      >
+        Play cry
+      </button>
+    </section>
   </div>
 </template>
 
 <style scoped>
 .search-tab {
-  --ink: #1b2230;
-  --muted: #5d6676;
-  --line: #dfe3ea;
   --paper: #ffffff;
+  --line: #dfe3ea;
 
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 24px 20px 48px;
-  color: var(--ink);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  width: 100%;
+  padding: 36px clamp(12px, 3vw, 32px) 64px;
+  color: var(--text);
+  font-family: var(--font-ui);
+  text-align: center;
 }
 
 .page-head h2 {
   margin: 0;
-  font-size: 32px;
-  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  font-size: clamp(30px, 5vw, 46px);
+  font-weight: 700;
+  line-height: 1.1;
 }
 .page-head p {
-  margin: 4px 0 20px;
+  margin: 8px 0 24px;
+  font-size: 18px;
   color: var(--muted);
+}
+
+/* ---------- Bench (mini cards) ---------- */
+.bench h3,
+.moves h3 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+.bench-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.mini {
+  width: 104px;
+  border-radius: 6px;
+  transition: transform 0.2s, filter 0.2s, opacity 0.2s;
+}
+.mini.active {
+  transform: translateY(-6px);
+  box-shadow: 0 0 0 3px var(--yellow), 0 0 26px rgba(255, 203, 5, 0.55);
+}
+.mini.fainted {
+  opacity: 0.45;
+  filter: grayscale(1) brightness(0.8);
 }
 
 /* ---------- Search ---------- */
 .search-bar {
   position: relative;
-  margin-bottom: 28px;
+  z-index: 5;
+  max-width: 680px;
+  margin: 0 auto 36px;
+  text-align: left;
 }
 
 input[type='text'] {
-  box-sizing: border-box;
   width: 100%;
-  padding: 14px 44px 14px 16px;
-  font-size: 16px;
+  padding: 16px 48px 16px 52px;
+  font: inherit;
+  font-size: 18px;
   color: var(--ink);
   background: var(--paper);
-  border: 2px solid var(--line);
-  border-radius: 10px;
+  border: 3px solid transparent;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(8, 4, 40, 0.45);
+}
+input[type='text']::placeholder {
+  color: #8a86a3;
 }
 input[type='text']:focus-visible {
-  outline: 3px solid #483dca55;
-  border-color: #483dca;
+  outline: none;
+  border-color: var(--yellow);
+  box-shadow: 0 0 0 4px rgba(255, 203, 5, 0.35), 0 10px 30px rgba(8, 4, 40, 0.45);
+}
+
+.search-icon {
+  position: absolute;
+  top: 50%;
+  left: 18px;
+  width: 24px;
+  height: 24px;
+  transform: translateY(-50%);
+  color: #6a5fd0;
+  pointer-events: none;
 }
 
 .spinner {
   position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--line);
-  border-top-color: #483dca;
+  top: 18px;
+  right: 18px;
+  width: 20px;
+  height: 20px;
+  border: 3px solid #e3e0f5;
+  border-top-color: #6a5fd0;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -413,22 +371,22 @@ input[type='text']:focus-visible {
   z-index: 10;
   left: 0;
   right: 0;
-  top: calc(100% + 6px);
+  top: calc(100% + 8px);
   margin: 0;
+  color: var(--ink);
   background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(27, 34, 48, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 18px 44px rgba(8, 4, 40, 0.55);
 }
 .result-list {
-  padding: 4px;
+  padding: 6px;
   list-style: none;
-  max-height: 320px;
+  max-height: 340px;
   overflow-y: auto;
 }
 .result-note {
-  padding: 14px 16px;
-  color: var(--muted);
+  padding: 16px 18px;
+  color: #5d6676;
 }
 .result-note--error {
   color: #b3261e;
@@ -437,239 +395,138 @@ input[type='text']:focus-visible {
 .result-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 6px 12px;
   font: inherit;
-  font-size: 15px;
+  font-size: 17px;
   color: inherit;
   text-align: left;
   background: none;
   border: 0;
-  border-radius: 8px;
+  border-radius: 12px;
   cursor: pointer;
 }
 .result-item:hover,
 .result-item:focus-visible {
-  background: #f0f0f8;
+  background: #efeaff;
   outline: none;
 }
 .thumb {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
+  padding: 2px;
   object-fit: contain;
   image-rendering: pixelated;
+  background: #f3f0ff;
+  border-radius: 50%;
 }
 .thumb--empty {
-  background: #f0f1f4;
-  border-radius: 50%;
+  background: #ebe8f7;
 }
 .result-name {
   flex: 1;
-  font-weight: 600;
+  font-weight: 700;
 }
 .result-id {
-  color: var(--muted);
+  color: #7a7596;
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: 14px;
 }
 
-/* ---------- Status ---------- */
+/* ---------- Stage ---------- */
+.stage {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  padding: 8px 0;
+}
+/* spotlight: both type colours glow behind the card, across the full width */
+.stage::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -60px -4% -60px;
+  background:
+    radial-gradient(34% 56% at 36% 50%, color-mix(in srgb, var(--c1) 55%, transparent), transparent 100%),
+    radial-gradient(34% 56% at 64% 50%, color-mix(in srgb, var(--c2) 55%, transparent), transparent 100%);
+  transition: opacity 0.4s;
+}
+.stage--idle::before {
+  opacity: 0.3;
+}
+
+.card-wrap {
+  width: min(460px, 100%);
+}
+
+/* empty card slot, like a binder page */
+.slot {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  width: min(440px, 100%);
+  aspect-ratio: 63 / 88;
+  padding: 32px;
+  border: 3px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.slot--error {
+  border-color: rgba(255, 120, 110, 0.7);
+  background: rgba(217, 71, 58, 0.12);
+}
+.slot-spin {
+  width: 34px;
+  height: 34px;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--yellow);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
 .status {
-  margin: 16px 0;
+  max-width: 24ch;
+  margin: 0;
+  font-size: 18px;
   color: var(--muted);
 }
 .status--error {
-  color: #b3261e;
-}
-.status--hint {
-  padding: 28px;
-  text-align: center;
-  border: 2px dashed var(--line);
-  border-radius: 12px;
-}
-
-/* ---------- Card ---------- */
-.pokemon-card {
-  display: flex;
-  align-items: stretch;
-  gap: 28px;
-  padding: 28px;
-  background: color-mix(in srgb, var(--accent) 12%, #ffffff);
-  border: 2px solid color-mix(in srgb, var(--accent) 55%, #ffffff);
-  border-radius: 16px;
-}
-
-.art {
-  flex: 0 0 240px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 240px;
-  background: radial-gradient(
-    circle at 50% 50%,
-    color-mix(in srgb, var(--accent) 38%, #ffffff) 0 58%,
-    transparent 59%
-  );
-}
-.art img {
-  width: 100%;
-  max-width: 240px;
-  height: auto;
-  filter: drop-shadow(0 8px 10px rgba(27, 34, 48, 0.25));
-}
-.art-empty {
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.card-info {
-  flex: 1;
-  min-width: 0;
-}
-.title-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-.card-info h3 {
-  margin: 0;
-  font-size: 30px;
-  letter-spacing: -0.02em;
-}
-.dex {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-
-.types {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0 16px;
-}
-.type-badge {
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 600;
-}
-.tag {
-  padding: 3px 10px;
-  border: 1.5px solid var(--ink);
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.facts {
-  display: flex;
-  gap: 24px;
-  margin: 0 0 16px;
-}
-.facts dt {
-  font-size: 12px;
-  color: var(--muted);
-}
-.facts dd {
-  margin: 2px 0 0;
-  font-weight: 700;
-}
-
-.card-info h4 {
-  margin: 0 0 6px;
-  font-size: 14px;
-}
-.abilities {
-  margin-bottom: 16px;
-}
-.abilities ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.abilities small {
-  margin-left: 4px;
-  color: var(--muted);
-  font-style: italic;
-}
-
-.stat-row {
-  display: grid;
-  grid-template-columns: 72px 36px 1fr;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 0;
-  font-size: 14px;
-}
-.stat-name {
-  color: var(--muted);
-}
-.stat-value {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-.bar {
-  height: 8px;
-  background: color-mix(in srgb, var(--accent) 18%, #ffffff);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.fill {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  border-radius: 999px;
-}
-.stat-row--total {
-  margin-top: 4px;
-  padding-top: 6px;
-  border-top: 1px solid color-mix(in srgb, var(--accent) 35%, #ffffff);
+  color: #ffb4ab;
 }
 
 .cry-btn {
-  margin-top: 16px;
-  padding: 8px 16px;
-  font: inherit;
-  font-size: 14px;
+  padding: 12px 32px;
+  font-family: var(--font-display);
+  font-size: 18px;
   font-weight: 600;
   color: var(--ink);
-  background: #ffffff;
-  border: 2px solid var(--ink);
-  border-radius: 8px;
+  background: linear-gradient(180deg, var(--yellow), var(--yellow-deep));
+  border: 0;
+  border-radius: 14px;
+  box-shadow: 0 4px 0 #b97a00, 0 10px 22px rgba(0, 0, 0, 0.3);
   cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
 }
 .cry-btn:hover {
-  background: var(--ink);
-  color: #ffffff;
+  transform: translateY(-1px);
+}
+.cry-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #b97a00, 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 .cry-btn:focus-visible {
-  outline: 3px solid #483dca55;
-  outline-offset: 2px;
-}
-
-@media (max-width: 640px) {
-  .pokemon-card {
-    flex-direction: column;
-    padding: 20px;
-  }
-  .art {
-    flex-basis: auto;
-    min-height: 200px;
-  }
-  .art img {
-    max-width: 200px;
-  }
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spinner {
+  .spinner,
+  .slot-spin {
     animation-duration: 2s;
   }
 }

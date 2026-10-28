@@ -2,9 +2,11 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import {
   TEAM_SIZE, STRUGGLE, drawFighters, resolveAttack, chooseBotMove, actsFirst,
-  getTypeColor, formatName,
+  formatName,
   type BattleMove, type Fighter
 } from './pokemonBattle'
+import PokemonCard from './PokemonCard.vue'
+import { getTypeColor, typeIcon } from './cardStyle'
 
 type Side = 'player' | 'bot'
 type Phase = 'idle' | 'loading' | 'choose' | 'resolving' | 'finished'
@@ -36,8 +38,6 @@ const sides = computed(() => [
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const nameOf = (f: Fighter) => formatName(f.card.name)
-const hpPct = (f: Fighter) => Math.max(0, Math.round((f.hp / f.maxHp) * 100))
-const hpColor = (f: Fighter) => (hpPct(f) > 50 ? '#4caf50' : hpPct(f) > 20 ? '#e8b92f' : '#d9473a')
 
 function say(msg: string) {
   log.value.push(msg)
@@ -163,150 +163,683 @@ function finish(attacker: Side, pOut: boolean, bOut: boolean) {
 
 <template>
   <div class="game-tab">
-    <h2>Battle Arena</h2>
+    <header class="game-head">
+      <h2>Battle Arena</h2>
 
-    <div class="setup">
-      <label><input v-model="mode" type="radio" value="duel" :disabled="phase === 'loading' || phase === 'resolving'" /> 5 Duelle (1:1)</label>
-      <label><input v-model="mode" type="radio" value="team" :disabled="phase === 'loading' || phase === 'resolving'" /> 5v5 Team-Kampf</label>
-      <button
-        :class="['fight-btn', { fighting: phase === 'loading' }]"
-        :disabled="phase === 'loading' || phase === 'resolving'"
-        @click="startBattle"
-      >
-        {{ phase === 'loading' ? '⏳ Lade Kampf …' : phase === 'idle' ? 'Battle!' : 'Neues Spiel' }}
-      </button>
-    </div>
+      <div class="setup">
+        <div class="modes">
+          <label class="mode">
+            <input v-model="mode" type="radio" value="duel" :disabled="phase === 'loading' || phase === 'resolving'" />
+            <span>5 Duelle (1:1)</span>
+          </label>
+          <label class="mode">
+            <input v-model="mode" type="radio" value="team" :disabled="phase === 'loading' || phase === 'resolving'" />
+            <span>5v5 Team-Kampf</span>
+          </label>
+        </div>
+        <button
+          :class="['fight-btn', { fighting: phase === 'loading' }]"
+          :disabled="phase === 'loading' || phase === 'resolving'"
+          @click="startBattle"
+        >
+          {{ phase === 'loading' ? '⏳ Lade Kampf …' : phase === 'idle' ? 'Battle!' : 'Neues Spiel' }}
+        </button>
+      </div>
+    </header>
 
     <p v-if="error" class="error">{{ error }}</p>
 
     <div v-if="phase !== 'idle' && phase !== 'loading'" class="battle-results">
-      <div class="scoreline">
-        <template v-if="mode === 'duel'">
-          Duell {{ Math.min(duelResults.length + 1, playerTeam.length) }} / {{ playerTeam.length }}
-          · Du {{ playerWins }} : {{ botWins }} Bot
-        </template>
-        <template v-else>
-          Übrig: Du {{ playerTeam.length - pIdx }} · Bot {{ botTeam.length - bIdx }}
-        </template>
-      </div>
-
-      <section v-for="team in [{ k: 'bot', label: 'Bot Cards', t: botTeam, i: bIdx }, { k: 'player', label: 'Your Cards', t: playerTeam, i: pIdx }]" :key="team.k" class="strip">
-        <h3>{{ team.label }}</h3>
-        <div class="strip-cards">
-          <div
-            v-for="(f, idx) in team.t"
-            :key="team.k + idx"
-            :class="['mini', { active: idx === team.i && phase !== 'finished', fainted: f.hp <= 0 }]"
-            :title="nameOf(f)"
-          >
-            <img :src="f.card.image" :alt="f.card.name" />
-            <span>{{ nameOf(f) }}</span>
-          </div>
-        </div>
-      </section>
-
-      <div v-if="activeP && activeB" class="arena">
-        <div v-for="s in sides" :key="s.key" class="pokemon-card" :style="{ '--type-color': getTypeColor(s.fighter.card.types[0] ?? '') }">
-          <img :src="s.fighter.card.image" :alt="s.fighter.card.name" />
-          <div class="card-info">
-            <strong>{{ nameOf(s.fighter) }}</strong>
-            <span class="who">{{ s.label }}</span>
-            <div class="types">
-              <span v-for="t in s.fighter.card.types" :key="t" class="type-badge" :style="{ backgroundColor: getTypeColor(t) }">{{ t }}</span>
-            </div>
-            <div class="hp-bar"><div class="hp-fill" :style="{ width: hpPct(s.fighter) + '%', background: hpColor(s.fighter) }" /></div>
-            <div class="score-display">{{ s.fighter.hp }} / {{ s.fighter.maxHp }} KP</div>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="phase === 'choose' || phase === 'resolving'" class="moves">
-        <h3>Wähle eine Attacke</h3>
-        <div class="move-grid">
-          <button
-            v-for="m in activeP.moves"
-            :key="m.id"
-            class="move-btn"
-            :style="{ '--c': getTypeColor(m.type) }"
-            :disabled="phase !== 'choose' || m.ppLeft <= 0"
-            @click="playTurn(m)"
-          >
-            <strong>{{ formatName(m.name) }}</strong>
-            <small>{{ m.type }} · {{ m.damageClass === 'physical' ? 'physisch' : 'spezial' }}</small>
-            <small>Stärke {{ m.power }} · Genauigkeit {{ m.accuracy ?? '–' }} · AP {{ m.ppLeft }}/{{ m.pp }}</small>
-          </button>
-          <button v-if="noPpLeft" class="move-btn" :disabled="phase !== 'choose'" @click="playTurn(null)">
-            <strong>Verzweifler</strong>
-            <small>Alle AP aufgebraucht – Rückstoß</small>
-          </button>
-        </div>
-      </div>
-
-      <div ref="logEl" class="log">
-        <p v-for="(line, i) in log" :key="i">{{ line }}</p>
-      </div>
-
-      <div v-if="phase === 'finished'" class="winner-banner">
+      <div v-if="phase === 'finished'" :class="['winner-banner', `winner-banner--${winner}`]">
         <strong>{{ winner === 'player' ? 'Du hast Gewonnen!' : 'Bot hat Gewonnen!' }}</strong>
       </div>
+
+      <div class="battle">
+        <div class="main">
+          <section
+            v-for="team in [{ k: 'bot', label: 'Bot Cards', t: botTeam, i: bIdx }, { k: 'player', label: 'Your Cards', t: playerTeam, i: pIdx }]"
+            :key="team.k"
+            :class="['bench', `bench--${team.k}`]"
+          >
+            <h3>{{ team.label }}</h3>
+            <div class="bench-cards">
+              <div
+                v-for="(f, idx) in team.t"
+                :key="team.k + idx"
+                :class="['mini', { active: idx === team.i && phase !== 'finished', fainted: f.hp <= 0 }]"
+                :title="nameOf(f)"
+              >
+                <PokemonCard
+                  variant="compact"
+                  :interactive="false"
+                  :name="f.card.name"
+                  :types="f.card.types"
+                  :image="f.card.image"
+                  :hp="f.maxHp"
+                  :current-hp="f.hp"
+                  hp-label="KP"
+                />
+              </div>
+            </div>
+          </section>
+
+          <div v-if="activeP && activeB" class="arena">
+            <template v-for="(s, i) in sides" :key="s.key">
+              <div :class="['seat', `seat--${s.key}`]">
+                <span class="seat-label">{{ s.label }}</span>
+                <PokemonCard
+                  :name="s.fighter.card.name"
+                  :types="s.fighter.card.types"
+                  :image="s.fighter.card.image"
+                  :hp="s.fighter.maxHp"
+                  :current-hp="s.fighter.hp"
+                  hp-label="KP"
+                >
+                  <ul v-if="s.fighter.moves.length" class="attacks">
+                    <li
+                      v-for="m in s.fighter.moves"
+                      :key="m.id"
+                      :class="{ spent: m.ppLeft <= 0 }"
+                      :style="{ '--c': getTypeColor(m.type) }"
+                    >
+                      <span class="atk-orb" aria-hidden="true">{{ typeIcon(m.type) }}</span>
+                      <span class="atk-name">{{ formatName(m.name) }}</span>
+                      <b class="atk-power">{{ m.power ?? '–' }}</b>
+                    </li>
+                  </ul>
+                </PokemonCard>
+              </div>
+              <span v-if="i === 0" class="vs" aria-hidden="true">VS</span>
+            </template>
+          </div>
+
+          <div v-if="phase === 'choose' || phase === 'resolving'" class="moves">
+            <h3>Wähle eine Attacke</h3>
+            <div class="move-grid">
+              <button
+                v-for="m in activeP.moves"
+                :key="m.id"
+                class="move-btn"
+                :style="{ '--c': getTypeColor(m.type) }"
+                :disabled="phase !== 'choose' || m.ppLeft <= 0"
+                @click="playTurn(m)"
+              >
+                <span class="move-orb" aria-hidden="true">{{ typeIcon(m.type) }}</span>
+                <span class="move-body">
+                  <strong>{{ formatName(m.name) }}</strong>
+                  <small>{{ m.type }} · {{ m.damageClass === 'physical' ? 'physisch' : 'spezial' }}</small>
+                  <small>Genauigkeit {{ m.accuracy ?? '–' }} · AP {{ m.ppLeft }}/{{ m.pp }}</small>
+                </span>
+                <span class="move-power">
+                  <small>Stärke</small>
+                  <b>{{ m.power }}</b>
+                </span>
+              </button>
+              <button v-if="noPpLeft" class="move-btn" :disabled="phase !== 'choose'" @click="playTurn(null)">
+                <span class="move-orb" aria-hidden="true">💥</span>
+                <span class="move-body">
+                  <strong>Verzweifler</strong>
+                  <small>Alle AP aufgebraucht – Rückstoß</small>
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="side">
+          <div class="scoreline">
+            <template v-if="mode === 'duel'">
+              <span class="score-head">Duell {{ Math.min(duelResults.length + 1, playerTeam.length) }} / {{ playerTeam.length }}</span>
+              <span class="score-main">
+                <span class="who">Du</span>
+                <b>{{ playerWins }}</b><i>:</i><b>{{ botWins }}</b>
+                <span class="who">Bot</span>
+              </span>
+            </template>
+            <template v-else>
+              <span class="score-head">Übrig</span>
+              <span class="score-main">
+                <span class="who">Du</span>
+                <b>{{ playerTeam.length - pIdx }}</b><i>:</i><b>{{ botTeam.length - bIdx }}</b>
+                <span class="who">Bot</span>
+              </span>
+            </template>
+          </div>
+
+          <div ref="logEl" class="log">
+            <p v-for="(line, i) in log" :key="i" :class="{ latest: i === log.length - 1 }">{{ line }}</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- Before the first battle: a fan of face-down cards -->
+    <div v-else class="lobby">
+      <div :class="['fan', { shuffling: phase === 'loading' }]" aria-hidden="true">
+        <span class="card-back" style="--r: -15deg; --x: -42px; --d: 0s"></span>
+        <span class="card-back" style="--r: 0deg; --x: 0px; --d: 0.15s"></span>
+        <span class="card-back" style="--r: 15deg; --x: 42px; --d: 0.3s"></span>
+      </div>
+      <p>Wähle einen Modus und drücke „Battle!“, um fünf Karten zu ziehen.</p>
     </div>
   </div>
 </template>
 
 <style scoped>
-.game-tab { padding: 20px; }
-.setup { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.game-tab {
+  width: 100%;
+  padding: 28px clamp(12px, 3vw, 32px) 64px;
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+/* ---------- Header / setup ---------- */
+.game-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 28px;
+}
+.game-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 700;
+  line-height: 1.1;
+}
+.setup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 20px;
+}
+
+.modes {
+  display: inline-flex;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+}
+.mode {
+  position: relative;
+  cursor: pointer;
+}
+.mode input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.mode span {
+  display: block;
+  padding: 9px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 999px;
+  transition: background 0.15s, color 0.15s;
+}
+.mode input:checked + span {
+  color: var(--ink);
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.mode input:focus-visible + span {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+.mode input:disabled + span {
+  opacity: 0.55;
+}
+.mode input:disabled {
+  cursor: not-allowed;
+}
+
 .fight-btn {
-  padding: 16px 48px; font-size: 20px;
-  background: linear-gradient(135deg, #e366ea 0%, #a24b8b 100%);
-  color: #fff; border-radius: 8px; border: 0; cursor: pointer;
+  padding: 14px 44px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+  background: linear-gradient(180deg, var(--yellow), var(--yellow-deep));
+  border: 0;
+  border-radius: 16px;
+  box-shadow: 0 5px 0 #b97a00, 0 12px 26px rgba(255, 170, 0, 0.3);
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
 }
-.fight-btn:hover:not(:disabled) { background: #7a3f9c; }
-.fight-btn:disabled { opacity: 0.7; }
-.fighting { cursor: wait; }
-.error { color: #d9473a; margin-top: 12px; }
-
-.battle-results { display: flex; flex-direction: column; gap: 20px; margin-top: 24px; }
-.scoreline { font-weight: 600; }
-.strip h3, .moves h3 { font-size: 16px; margin: 0 0 8px; }
-.strip-cards { display: flex; flex-wrap: wrap; gap: 8px; }
-.mini { display: flex; flex-direction: column; align-items: center; width: 76px; font-size: 11px; padding: 4px; border-radius: 8px; border: 2px solid transparent; }
-.mini img { width: 56px; height: 56px; object-fit: contain; }
-.mini.active { border-color: #a24b8b; }
-.mini.fainted { opacity: 0.35; filter: grayscale(1); }
-
-.arena { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-.pokemon-card {
-  display: flex; gap: 12px; align-items: center; padding: 12px;
-  border-radius: 12px; border: 3px solid var(--type-color);
-  background: color-mix(in srgb, var(--type-color) 14%, transparent);
+.fight-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
 }
-.pokemon-card img { width: 110px; height: 110px; object-fit: contain; }
-.card-info { display: flex; flex-direction: column; gap: 4px; flex: 1; }
-.card-info strong { font-size: 16px; }
-.who { font-size: 12px; opacity: 0.7; }
-.types { display: flex; gap: 4px; }
-.type-badge { padding: 2px 8px; color: #fff; font-size: 11px; border-radius: 10px; }
-.hp-bar { height: 10px; background: rgba(128, 128, 128, 0.3); border-radius: 5px; overflow: hidden; }
-.hp-fill { height: 100%; transition: width 0.4s ease, background 0.4s ease; }
-.score-display { font-size: 12px; }
+.fight-btn:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 #b97a00, 0 4px 12px rgba(255, 170, 0, 0.25);
+}
+.fight-btn:disabled {
+  opacity: 0.7;
+}
+.fight-btn:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+.fighting {
+  cursor: wait;
+}
 
-.move-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.error {
+  margin: 18px 0 0;
+  padding: 12px 16px;
+  color: #ffd3cd;
+  background: rgba(217, 71, 58, 0.2);
+  border: 1px solid rgba(255, 120, 110, 0.5);
+  border-radius: 12px;
+}
+
+/* ---------- Lobby (idle / loading) ---------- */
+.lobby {
+  display: grid;
+  justify-items: center;
+  gap: 60px;
+  padding: 56px 0 16px;
+  text-align: center;
+}
+.lobby p {
+  max-width: 38ch;
+  margin: 0;
+  font-size: 18px;
+  color: var(--muted);
+}
+.fan {
+  position: relative;
+  width: 300px;
+  height: 240px;
+}
+.card-back {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 150px;
+  aspect-ratio: 63 / 88;
+  margin-left: -75px;
+  border: 5px solid #f4e9c1;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.22), transparent 55%),
+    linear-gradient(160deg, #3a56d4, #1a2370);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5), inset 0 0 0 3px rgba(0, 0, 0, 0.3);
+  transform-origin: 50% 120%;
+  transform: translateX(var(--x)) rotate(var(--r));
+}
+.card-back::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 4px solid #14142b;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #ffffff 0 13%, #14142b 14% 22%, transparent 23%),
+    linear-gradient(#ee3b3b 0 47%, #14142b 47% 53%, #ffffff 53%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shuffling .card-back {
+    animation: shuffle 0.7s ease-in-out infinite alternate;
+    animation-delay: var(--d);
+  }
+}
+@keyframes shuffle {
+  from { transform: translateX(var(--x)) rotate(var(--r)); }
+  to   { transform: translateX(calc(var(--x) * -1)) rotate(calc(var(--r) * -1)); }
+}
+
+/* ---------- Battle layout ---------- */
+.battle-results {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-top: 26px;
+}
+
+.battle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-width: 0;
+}
+/* Bot bench, arena, your bench, your moves */
+.bench--bot { order: 1; }
+.arena { order: 2; }
+.bench--player { order: 3; }
+.moves { order: 4; }
+
+@media (min-width: 1100px) {
+  .battle {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    align-items: start;
+  }
+  .side {
+    position: sticky;
+    top: 16px;
+  }
+}
+
+/* ---------- Bench (mini cards) ---------- */
+.bench h3,
+.moves h3 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+.bench-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.mini {
+  width: 104px;
+  border-radius: 6px;
+  transition: transform 0.2s, filter 0.2s, opacity 0.2s;
+}
+.mini.active {
+  transform: translateY(-6px);
+  box-shadow: 0 0 0 3px var(--yellow), 0 0 26px rgba(255, 203, 5, 0.55);
+}
+.mini.fainted {
+  opacity: 0.45;
+  filter: grayscale(1) brightness(0.8);
+}
+
+/* ---------- Arena ---------- */
+.arena {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 18px clamp(14px, 3vw, 44px);
+  padding: 8px 0;
+}
+.seat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: clamp(230px, 26vw, 320px);
+}
+.seat-label {
+  align-self: center;
+  padding: 4px 18px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+}
+.seat--player .seat-label {
+  color: var(--ink);
+  background: var(--yellow);
+  border-color: transparent;
+}
+.vs {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 4vw, 46px);
+  font-weight: 700;
+  color: var(--yellow);
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35), 0 0 24px rgba(255, 203, 5, 0.5);
+}
+
+@media (max-width: 760px) {
+  .seat { width: min(320px, 100%); }
+  .vs { flex-basis: 100%; text-align: center; line-height: 1; }
+}
+
+/* attack list printed on the arena cards (sized in cqw, like the card itself) */
+.attacks {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4cqw;
+  margin: 0;
+  padding: 0 0 2.4cqw;
+  list-style: none;
+  border-bottom: 0.3cqw solid rgba(29, 26, 47, 0.2);
+}
+.attacks li {
+  display: flex;
+  align-items: center;
+  gap: 2cqw;
+  font-size: 3.8cqw;
+  font-weight: 700;
+}
+.attacks li.spent {
+  opacity: 0.45;
+}
+.atk-orb {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 6.4cqw;
+  height: 6.4cqw;
+  font-size: 3.4cqw;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--c) 50%, #ffffff),
+    var(--c) 58%,
+    color-mix(in srgb, var(--c) 68%, #000000)
+  );
+  box-shadow: 0 0 0 0.4cqw #ffffff, 0 0.5cqw 1cqw rgba(0, 0, 0, 0.3);
+}
+.atk-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.atk-power {
+  font-family: var(--font-display);
+  font-size: 4.4cqw;
+  font-weight: 600;
+}
+
+/* ---------- Moves (attack strips) ---------- */
+.move-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
 .move-btn {
-  display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 10px 12px;
-  border-radius: 8px; border: 2px solid var(--c, #7a7c90); background: transparent;
-  color: inherit; cursor: pointer;
+  --c: #7a7c90;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px 10px 10px;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--c) 50%, #ffffff),
+    color-mix(in srgb, var(--c) 20%, #ffffff)
+  );
+  border: 3px solid color-mix(in srgb, var(--c) 85%, #000000);
+  border-radius: 14px;
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--c) 60%, #000000), 0 10px 20px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s, filter 0.15s;
 }
-.move-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--c, #7a7c90) 22%, transparent); }
-.move-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.move-btn small { font-size: 11px; opacity: 0.8; }
+.move-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.06);
+}
+.move-btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--c) 60%, #000000), 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+.move-btn:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+.move-btn:disabled {
+  opacity: 0.45;
+  filter: saturate(0.5);
+  cursor: not-allowed;
+}
+.move-orb {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  font-size: 22px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--c) 50%, #ffffff),
+    var(--c) 58%,
+    color-mix(in srgb, var(--c) 68%, #000000)
+  );
+  box-shadow: 0 0 0 3px #ffffff, 0 3px 6px rgba(0, 0, 0, 0.35);
+}
+.move-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.move-body strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.move-body small {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.8;
+}
+.move-power {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1;
+}
+.move-power small {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+.move-power b {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+}
 
-.log { max-height: 180px; overflow-y: auto; padding: 10px 12px; border-radius: 8px; background: rgba(128, 128, 128, 0.12); font-size: 13px; }
-.log p { margin: 2px 0; }
+/* ---------- Side column ---------- */
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.scoreline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+}
+.score-head {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.score-main {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-family: var(--font-display);
+}
+.score-main b {
+  min-width: 1ch;
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.score-main i {
+  font-size: 30px;
+  font-style: normal;
+  color: var(--yellow);
+}
+.score-main .who {
+  font-size: 18px;
+  font-weight: 600;
+}
 
+.log {
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  font-size: 15px;
+  line-height: 1.35;
+  background: rgba(8, 4, 40, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+}
+.log p {
+  margin: 0;
+  padding: 4px 0;
+  color: var(--muted);
+}
+.log p + p {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.log p.latest {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* ---------- Winner ---------- */
 .winner-banner {
-  padding: 16px; text-align: center; border-radius: 8px;
-  background: linear-gradient(135deg, #e366ea 0%, #a24b8b 100%);
-  color: #fff; font-size: 20px;
+  padding: 18px;
+  text-align: center;
+  border-radius: 18px;
+  font-family: var(--font-display);
+  font-size: clamp(24px, 4vw, 34px);
+  animation: pop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.winner-banner--player {
+  color: var(--ink);
+  background: linear-gradient(100deg, #ffe45c, var(--yellow-deep));
+  box-shadow: 0 6px 0 #b97a00, 0 16px 40px rgba(255, 170, 0, 0.35);
+}
+.winner-banner--bot {
+  color: #ffffff;
+  background: linear-gradient(100deg, #ff3d8b, #6a2bd9);
+  box-shadow: 0 6px 0 #3d1580, 0 16px 40px rgba(177, 59, 255, 0.35);
+}
+@keyframes pop {
+  from { transform: scale(0.9); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .winner-banner { animation: none; }
+  .mini { transition: none; }
 }
 </style>

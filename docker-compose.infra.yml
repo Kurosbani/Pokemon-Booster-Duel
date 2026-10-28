@@ -1,4 +1,5 @@
 services:
+
   registry:
     image: registry:2
     container_name: registry
@@ -35,6 +36,31 @@ services:
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     networks:
       - pokemon-net
+
+  server:
+    build: ./server
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    command: node server.mjs
+    restart: unless-stopped
+    networks:
+      - pokemon-net
+
+  frontend:
+    build: ./src
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app
+      - /app/node_modules
+    command: npm run dev
+    restart: unless-stopped
+    networks:
+      - pokemon-net
+
 
 volumes:
   db-data:
