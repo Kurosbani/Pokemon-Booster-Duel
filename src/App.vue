@@ -38,9 +38,6 @@ const activeTab = ref<'search' | 'game'>('search')
   </div>
 </template>
 
-<!-- Global: fonts, tokens and the reset that makes the page truly edge-to-edge.
-     (Overrides the default Vite template's `#app { max-width; margin; padding }`
-     and `body { display: flex; place-items: center }`.) -->
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Fredoka:wght@500;600;700&display=swap');
 
@@ -64,8 +61,6 @@ const activeTab = ref<'search' | 'game'>('search')
   box-sizing: border-box;
 }
 
-/* `html:root`, `html body` and `html body #app` are deliberately a bit more specific
-   than the default Vite / create-vue template rules, so they win whatever the CSS order. */
 html:root {
   width: 100%;
   min-width: 0;
@@ -127,7 +122,24 @@ html body #app {
   border: 3.4vmin solid rgba(255, 255, 255, 0.04);
   border-radius: 50%;
   background: linear-gradient(
-    transparent calc(50% - 1.7vmin),
+    transparent calc(100% - 1.7vmin),
+    rgba(255, 255, 255, 0.04) calc(50% - 1.7vmin) calc(50% + 1.7vmin),
+    transparent calc(50% + 1.7vmin)
+  );
+  pointer-events: none;
+}
+
+.app-container::after {
+  content: '';
+  position: absolute;
+  left: -22vmin;
+  top: -22vmin;
+  width: 62vmin;
+  aspect-ratio: 1;
+  border: 3.4vmin solid rgba(255, 255, 255, 0.04);
+  border-radius: 50%;
+  background: linear-gradient(
+    transparent calc(100% - 1.7vmin),
     rgba(255, 255, 255, 0.04) calc(50% - 1.7vmin) calc(50% + 1.7vmin),
     transparent calc(50% + 1.7vmin)
   );

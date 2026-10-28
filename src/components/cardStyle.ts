@@ -10,7 +10,7 @@ export const TYPE_COLORS: Record<string, string> = {
 export const FALLBACK_COLOR = '#7a7c90'
 
 export const TYPE_ICONS: Record<string, string> = {
-  normal: '⭐', fire: '🔥', water: '💧', electric: '⚡', grass: '🍃', ice: '❄️',
+  normal: '✦', fire: '🔥', water: '💧', electric: '⚡', grass: '🍃', ice: '❄️',
   fighting: '👊', poison: '☠️', ground: '⛰️', flying: '🕊️', psychic: '🔮',
   bug: '🐛', rock: '🪨', ghost: '👻', dragon: '🐉', dark: '🌙', steel: '⚙️',
   fairy: '✨',

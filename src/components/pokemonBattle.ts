@@ -1,7 +1,5 @@
-// pokemonBattle.ts – Kampflogik + API-Adapter (kein Vue-Code)
-
 export const API_URL = 'http://localhost:3000'
-export const POOL_MAX = 1025 // höchste Pokemon-ID, die zufällig gezogen wird (ggf. anpassen)
+export const POOL_MAX = 1025 // highest ID
 export const TEAM_SIZE = 5
 export const LEVEL = 50
 
@@ -28,7 +26,7 @@ export interface Move {
   id: number
   name: string
   power: number | null
-  accuracy: number | null // null = trifft immer
+  accuracy: number | null // null = 100% acc
   pp: number
   priority: number
   type: string
@@ -61,7 +59,7 @@ export interface AttackResult {
 }
 
 /* ------------------------------------------------------------------ */
-/* Typen                                                               */
+/* Types                                                              */
 /* ------------------------------------------------------------------ */
 
 export const TYPE_COLORS: Record<string, string> = {
@@ -105,11 +103,11 @@ export function typeMultiplier(moveType: string, defenderTypes: string[]): numbe
 
 }
 
-// Fallback, solange die API keine damage class liefert (Gen-1-Regel: Typ bestimmt die Klasse)
+// Fallback
 const PHYSICAL_TYPES = new Set(['normal', 'fighting', 'flying', 'poison', 'ground', 'rock', 'bug', 'ghost', 'steel'])
 
 /* ------------------------------------------------------------------ */
-/* API-Adapter – hier anpassen, falls dein Backend anders antwortet    */
+/* API                                                                */
 /* ------------------------------------------------------------------ */
 
 async function getJson(path: string): Promise<any> {

@@ -1,0 +1,12 @@
+This is a simple Pokemon game that runs in a docker container
+The game is built with Vue and Node.js, and uses PostgreSQL as the database
+Features simple turn-based battle gameplay where you play against a bot using your cards
+
+How 3 start:
+
+1. Create a .env file and set the environment variables in .env.example
+
+2. Build it and run it with:
+docker compose build --no-cache && docker compose up
+
+3. Open your browser and go to http://localhost:8000 to access the frontend, http://localhost:3000 for the backend, and http://localhost:5050 for pgAdmin
