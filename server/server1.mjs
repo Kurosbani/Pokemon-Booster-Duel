@@ -19,10 +19,6 @@ const pool = new Pool({
 
 // --- Helpers ---
 
-// Pick the best image out of the pokemonsprites.sprites jsonb.
-// Assumes the PokeAPI layout (other.official-artwork.front_default, front_default, ...)
-// and falls back to "first image URL found anywhere in the object" so a slightly
-// different layout still produces something.
 function firstUrl(value) {
   if (typeof value === 'string') return /^https?:\/\//.test(value) ? value : null;
   if (Array.isArray(value)) {
@@ -67,11 +63,6 @@ app.get('/pokemon', async (req, res) => {
   }
 });
 
-// Browse: paginated list of every default-form pokemon, with thumbnail + types for cards.
-// ?seed=abc  -> stable pseudo-random order for that seed (so paging doesn't repeat/skip).
-//               A new seed gives a new shuffle. Without a seed: plain id order.
-// ?limit=24&offset=0 for paging. Returns { total, items }.
-// NOTE: must be declared before /pokemon/:value, otherwise "browse" is treated as a search term.
 app.get('/pokemon/browse', async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 24, 1), 100);
   const offset = Math.max(parseInt(req.query.offset) || 0, 0);
@@ -106,8 +97,6 @@ app.get('/pokemon/browse', async (req, res) => {
   }
 });
 
-// Full detail for ONE pokemon (types, stats, abilities, image, cry, species info).
-// Declared with an extra path segment so it never collides with /pokemon/:value.
 app.get('/pokemon/:id/details', async (req, res) => {
   if (!/^\d+$/.test(req.params.id)) {
     return res.status(400).json({ error: 'id must be a number' });
@@ -163,26 +152,19 @@ app.get('/pokemon/:id/details', async (req, res) => {
   }
 });
 
-// Search: numeric -> exact id, otherwise partial name match.
-// Returns a lightweight list: [{ id, name, thumbnail }]
 app.get('/pokemon/:value', async (req, res) => {
   const query = req.params.value;
 
-  // Parse & sanitize query parameters
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
   const offset = Math.max(parseInt(req.query.offset) || 0, 0);
   let sortField = req.query.sort || 'id';
 
-  // Whitelist allowed sort columns to prevent SQL injection
-  // (the old list had 'value', which isn't a column and would have thrown a 500)
   const allowedSortFields = ['id', 'name'];
   if (!allowedSortFields.includes(sortField)) {
     sortField = 'id';
   }
 
   try {
-    // Explicit columns: the old `SELECT p.*, ps.*` made pokemon and species
-    // columns (id, name, "order") overwrite each other in the JSON result.
     const baseQuery = `
       SELECT p.id, p.name,
         (SELECT s.sprites->>'front_default'
@@ -212,7 +194,6 @@ app.get('/pokemon/:value', async (req, res) => {
   }
 });
 
-// Browse moves: paginated list with optional shuffle seed (like /pokemon/browse)
 app.get('/moves', async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 24, 1), 100);
   const offset = Math.max(parseInt(req.query.offset) || 0, 0);
@@ -310,8 +291,6 @@ app.get('/pokemon/:id/moves', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch pokemon moves' });
   }
 });
-
-
 
 // Start server
 const PORT = process.env.PORT || 3000;

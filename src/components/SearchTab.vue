@@ -63,6 +63,8 @@ async function fetchResults(raw: string): Promise<void> {
     searchError.value = ''
     return
   }
+const getFallbackUrl = (id: number) =>
+  `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`
 
   const controller = new AbortController()
   searchController = controller
@@ -71,7 +73,7 @@ async function fetchResults(raw: string): Promise<void> {
 
   try {
     const res = await fetch(
-      `${apiBase}/pokemon/${encodeURIComponent(q)}?limit=20`,
+      `${apiBase}/pokemon/${encodeURIComponent(q)}/?limit=20`,
       { signal: controller.signal },
     )
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -164,6 +166,10 @@ const stageVars = computed(() =>
 function playCry(): void {
   if (selectedPokemon.value?.cry) new Audio(selectedPokemon.value.cry).play().catch(() => {})
 }
+
+const getFallbackUrl = (id: number) =>
+  `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`
+
 </script>
 
 <template>
@@ -197,7 +203,7 @@ function playCry(): void {
           <button type="button" class="result-item" @click="selectPokemon(item)">
             <img
               v-if="item.thumbnail"
-              :src="item.thumbnail"
+              :src="item.thumbnail || getFallbackUrl(item.id)"
               :alt="''"
               class="thumb"
               loading="lazy"
@@ -227,7 +233,7 @@ function playCry(): void {
           :key="selectedPokemon.id"
           :name="selectedPokemon.name"
           :types="cardTypes"
-          :image="selectedPokemon.image"
+          :image="selectedPokemon.image || getFallbackUrl(selectedPokemon!.id)"
           :hp="hpStat"
           :dex="selectedPokemon.id"
           :height="selectedPokemon.height"
