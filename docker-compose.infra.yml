@@ -37,17 +37,27 @@ services:
     networks:
       - pokemon-net
 
+
   server:
-    build:
-      context: .
-      dockerfile: ./server/Dockerfile  
+    image: maven:4.0.0-rc-7-eclipse-temurin-25-alpine
     ports:
       - "3000:3000"
     env_file: .env
-    depends_on:
-      - db
+    environment:
+      - QUARKUS_HTTP_PORT=3000
+      - QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://db:5432/pkmn-db
+      - QUARKUS_DATASOURCE_USERNAME=kuro
+      - QUARKUS_DATASOURCE_PASSWORD=gutespasswort67
+    depends_on: {
+      db: {
+        condition: service_started
+      }
+    }
     volumes:
-      - ./server:/app/server
+      - ./poke-api:/app
+      - maven-cache:/root/.m2
+    working_dir: /app
+    command: ["mvn", "quarkus:dev"]
     restart: unless-stopped
     networks:
       - pokemon-net
@@ -68,6 +78,7 @@ services:
 volumes:
   db-data:
   pushed-images:
+  maven-cache:
 
 networks:
   pokemon-net: 
